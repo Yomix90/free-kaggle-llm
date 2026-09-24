@@ -63,9 +63,9 @@ fi
 # ------------------------------------------------------------------------------
 # 1. Dépendances système
 # ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[1/7] 📦 Installation des prérequis système (zstd, curl, wget)...${NC}"
+echo -e "\n${BLUE}[1/7] 📦 Installation des prérequis système (zstd, curl, wget, aria2)...${NC}"
 apt-get update -qq >/dev/null 2>&1 || true
-apt-get install -y -qq zstd curl wget procps >/dev/null 2>&1
+apt-get install -y -qq zstd curl wget procps aria2 >/dev/null 2>&1 || apt-get install -y -qq zstd curl wget procps >/dev/null 2>&1
 echo -e "${GREEN}✓ Dépendances installées.${NC}"
 
 # ------------------------------------------------------------------------------
@@ -139,10 +139,48 @@ fi
 # ------------------------------------------------------------------------------
 # 5. Téléchargement du modèle
 # ------------------------------------------------------------------------------
-echo -e "\n${BLUE}[5/7] 📥 Téléchargement du modèle (peut prendre quelques minutes selon la taille)...${NC}"
+echo -e "\n${BLUE}[5/7] 📥 Téléchargement et chargement du modèle (peut prendre quelques minutes selon la taille)...${NC}"
 echo -e "${YELLOW}Cible : ${MODEL}${NC}"
-ollama pull "$MODEL"
-echo -e "${GREEN}✓ Modèle téléchargé avec succès !${NC}"
+
+# Vérifier si le modèle est le modèle DavidAU dont le nom dépasse 80 caractères
+# (Ollama CLI limite les noms de dépôt à 80 caractères max, ce qui cause "400 Bad Request: invalid model name")
+if [[ "$MODEL" == *"DavidAU"* && "$MODEL" == *"Qwen3.8-27B-TURBO-Fable-Cold-Fusion"* ]] || [[ "$MODEL" == *"DavidAU/Qwen3.8-27B-TURBO"* ]]; then
+    MODEL_ALIAS="qwen3.8-27b-turbo"
+    GGUF_URL="https://huggingface.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF/resolve/main/Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q4_K_M.gguf"
+    WORK_DIR="/kaggle/working"
+    [ ! -d "$WORK_DIR" ] && WORK_DIR="/tmp"
+    GGUF_FILE="${WORK_DIR}/qwen3.8-27b.gguf"
+    MODELFILE_PATH="${WORK_DIR}/Modelfile"
+
+    echo -e "${CYAN}ℹ️ Le nom du dépôt Hugging Face (85 caractères) dépasse la limite Ollama de 80 caractères.${NC}"
+    echo -e "${CYAN}🚀 Téléchargement direct accéléré du GGUF Q4_K_M (~17 Go)...${NC}"
+    
+    if command -v aria2c &> /dev/null; then
+        aria2c -x 16 -s 16 -k 1M -c "$GGUF_URL" -d "$WORK_DIR" -o "qwen3.8-27b.gguf"
+    else
+        wget -c --progress=bar:force:noscroll "$GGUF_URL" -O "$GGUF_FILE"
+    fi
+
+    echo -e "\n${BLUE}⚙️ Importation automatique dans Ollama sous l'alias : ${BOLD}${GREEN}${MODEL_ALIAS}${NC}..."
+    cat << EOF > "$MODELFILE_PATH"
+FROM ${GGUF_FILE}
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+EOF
+
+    ollama create "$MODEL_ALIAS" -f "$MODELFILE_PATH"
+
+    echo -e "${YELLOW}🧹 Nettoyage du fichier téléchargé pour récupérer ~17 Go d'espace immédiat...${NC}"
+    rm -f "$GGUF_FILE" "$MODELFILE_PATH"
+    
+    # Remplacer MODEL par l'alias pour tous les tests et commandes suivants
+    MODEL="$MODEL_ALIAS"
+    echo -e "${GREEN}✓ Modèle ${MODEL} créé et opérationnel dans Ollama !${NC}"
+else
+    # Téléchargement standard Ollama
+    ollama pull "$MODEL"
+    echo -e "${GREEN}✓ Modèle téléchargé avec succès !${NC}"
+fi
 
 # ------------------------------------------------------------------------------
 # 6. Installation de Cloudflared (Tunnel)

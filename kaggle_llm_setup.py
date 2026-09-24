@@ -78,11 +78,11 @@ class KaggleLLMSetup:
         return success
     
     def step_2_install_zstandard(self):
-        """Étape 2: Installer Zstandard"""
-        self.log_step(2, "Installation de Zstandard")
+        """Étape 2: Installer Zstandard et Aria2"""
+        self.log_step(2, "Installation des dépendances (Zstandard, Aria2)")
         success, _ = self.run_command(
-            "apt-get install -y -qq zstd",
-            "Installation de zstd"
+            "apt-get install -y -qq zstd aria2 || apt-get install -y -qq zstd",
+            "Installation des prérequis"
         )
         return success
     
@@ -145,7 +145,6 @@ class KaggleLLMSetup:
                         self.run_command(f"ollama rm {m_name}", f"Suppression de {m_name}")
         else:
             print(f"{self.colors['YELLOW']}→ Tentative de suppression de: {model_to_delete}{self.colors['END']}")
-            # Vérifier si présent
             _, out = self.run_command("ollama list", "Vérification des modèles installés")
             if model_to_delete in out:
                 self.run_command(f"ollama rm {model_to_delete}", f"Suppression du modèle {model_to_delete}")
@@ -157,31 +156,58 @@ class KaggleLLMSetup:
     
     def step_6_pull_model(self, model=DEFAULT_MODEL):
         """Étape 6: Télécharger un modèle LLM"""
-        self.log_step(6, f"Téléchargement du modèle: {model}")
+        self.log_step(6, f"Téléchargement et préparation du modèle: {model}")
         print(f"{self.colors['YELLOW']}→ Espace disque disponible : {self.get_free_disk()}{self.colors['END']}")
-        print(f"{self.colors['YELLOW']}→ Téléchargement en cours (peut prendre plusieurs minutes)...{self.colors['END']}")
         
-        success, output = self.run_command(
-            f"ollama pull {model}",
-            f"Téléchargement du modèle {model}",
-            shell=True
-        )
-        
-        if success:
-            print(f"{self.colors['YELLOW']}→ Sortie:\n{output}{self.colors['END']}")
+        # Contournement de la limite Ollama de 80 caractères pour le repo HF
+        if "DavidAU" in model and "Qwen3.8-27B-TURBO" in model:
+            self.active_model = "qwen3.8-27b-turbo"
+            gguf_url = "https://huggingface.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF/resolve/main/Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q4_K_M.gguf"
+            work_dir = "/kaggle/working" if os.path.exists("/kaggle/working") else "/tmp"
+            gguf_file = os.path.join(work_dir, "qwen3.8-27b.gguf")
+            modelfile = os.path.join(work_dir, "Modelfile")
+
+            print(f"{self.colors['BLUE']}ℹ️ Nom HF > 80 car. : Téléchargement direct accéléré du GGUF Q4_K_M (~17 Go)...{self.colors['END']}")
+            download_cmd = f"aria2c -x 16 -s 16 -k 1M -c '{gguf_url}' -d '{work_dir}' -o 'qwen3.8-27b.gguf' || wget -c --progress=bar:force '{gguf_url}' -O '{gguf_file}'"
+            self.run_command(download_cmd, "Téléchargement du GGUF")
+
+            print(f"{self.colors['BLUE']}⚙️ Création du modèle Ollama '{self.active_model}'...{self.colors['END']}")
+            with open(modelfile, "w") as f:
+                f.write(f"FROM {gguf_file}\nPARAMETER temperature 0.7\nPARAMETER top_p 0.9\n")
+            
+            success, _ = self.run_command(f"ollama create {self.active_model} -f {modelfile}", f"Création du modèle {self.active_model}")
+            
+            print(f"{self.colors['YELLOW']}🧹 Nettoyage du fichier temporaire...{self.colors['END']}")
+            if os.path.exists(gguf_file):
+                os.remove(gguf_file)
+            if os.path.exists(modelfile):
+                os.remove(modelfile)
+            
             print(f"{self.colors['GREEN']}✓ Espace disque restant : {self.get_free_disk()}{self.colors['END']}")
-        
-        return success
+            return success
+        else:
+            self.active_model = model
+            print(f"{self.colors['YELLOW']}→ Téléchargement via Ollama pull ({self.active_model})...{self.colors['END']}")
+            success, output = self.run_command(
+                f"ollama pull {self.active_model}",
+                f"Téléchargement du modèle {self.active_model}",
+                shell=True
+            )
+            if success:
+                print(f"{self.colors['YELLOW']}→ Sortie:\n{output}{self.colors['END']}")
+                print(f"{self.colors['GREEN']}✓ Espace disque restant : {self.get_free_disk()}{self.colors['END']}")
+            return success
     
-    def step_7_test_model(self, model=DEFAULT_MODEL):
+    def step_7_test_model(self, model=None):
         """Étape 7: Tester le modèle"""
-        self.log_step(7, f"Test du modèle {model}")
+        target = getattr(self, 'active_model', model or DEFAULT_MODEL)
+        self.log_step(7, f"Test du modèle {target}")
         
         print(f"{self.colors['YELLOW']}→ Envoi d'une requête de test...{self.colors['END']}")
         
         try:
             result = subprocess.run(
-                f'echo "Dis-moi comment tu t\'appelles" | ollama run {model}',
+                f'echo "Dis-moi comment tu t\'appelles" | ollama run {target}',
                 shell=True,
                 capture_output=True,
                 text=True,
@@ -269,8 +295,9 @@ class KaggleLLMSetup:
             self.log_error(f"Erreur création tunnel: {str(e)}")
             return False
     
-    def step_10_display_summary(self, model=DEFAULT_MODEL):
+    def step_10_display_summary(self, model=None):
         """Étape 10: Afficher le résumé final"""
+        target = getattr(self, 'active_model', model or DEFAULT_MODEL)
         self.log_step(10, "Résumé de l'installation")
         
         summary = f"""
@@ -282,7 +309,7 @@ class KaggleLLMSetup:
 
   🖥️  Ollama (Local):
      • URL: http://localhost:11434
-     • Modèle: {model}
+     • Modèle: {target}
      • Disque libre: {self.get_free_disk()}
 
   🌐 Tunnel Cloudflare (Public):

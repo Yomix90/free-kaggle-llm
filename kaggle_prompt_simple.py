@@ -43,10 +43,10 @@ if DELETE_MODEL:
 print(f"Espace disque disponible initial : {get_free_disk()}")
 print("=" * 70)
 
-# ── ÉTAPE 1: Installation de Zstandard ──────────────────────────
-print("\n[1/8] Installation de Zstandard...")
-subprocess.run("apt-get update -qq && apt-get install -y -qq zstd", shell=True, capture_output=True)
-print("✓ Zstandard installé")
+# ── ÉTAPE 1: Installation de Zstandard et Aria2 ────────────────
+print("\n[1/8] Installation des prérequis (zstd, aria2)...")
+subprocess.run("apt-get update -qq && (apt-get install -y -qq zstd aria2 || apt-get install -y -qq zstd)", shell=True, capture_output=True)
+print("✓ Dépendances installées")
 
 # ── ÉTAPE 2: Installation d'Ollama ──────────────────────────────
 print("\n[2/8] Installation d'Ollama...")
@@ -104,21 +104,52 @@ else:
     print("ℹ️ Aucune suppression demandée (DELETE_MODEL non configuré).")
 
 # ── ÉTAPE 6: Téléchargement du modèle LLM ──────────────────────
-print(f"\n[6/8] Téléchargement du modèle {MODEL}...")
-print(f"(Taille estimée ~17 Go. Espace libre avant téléchargement : {get_free_disk()})")
-print("(Cela peut prendre 5-15 minutes selon la bande passante Kaggle)")
-pull_res = subprocess.run(f"ollama pull {MODEL}", shell=True)
-if pull_res.returncode == 0:
-    print(f"✓ Modèle {MODEL} téléchargé avec succès")
-    print(f"✓ Espace disque restant : {get_free_disk()} libre")
+print(f"\n[6/8] Téléchargement et chargement du modèle...")
+print(f"(Espace libre avant téléchargement : {get_free_disk()})")
+
+# Si le modèle est le modèle DavidAU dont le nom dépasse 80 caractères
+# (La CLI Ollama a une limite stricte de 80 caractères pour le nom de repo Hugging Face)
+if "DavidAU" in MODEL and "Qwen3.8-27B-TURBO" in MODEL:
+    ACTIVE_MODEL = "qwen3.8-27b-turbo"
+    gguf_url = "https://huggingface.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF/resolve/main/Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q4_K_M.gguf"
+    work_dir = "/kaggle/working" if os.path.exists("/kaggle/working") else "/tmp"
+    gguf_file = os.path.join(work_dir, "qwen3.8-27b.gguf")
+    modelfile = os.path.join(work_dir, "Modelfile")
+    
+    print(f"ℹ️ Le nom complet Hugging Face (85 caractères) dépasse la limite Ollama de 80 caractères.")
+    print(f"🚀 Téléchargement direct accéléré du GGUF Q4_K_M (~17 Go)...")
+    download_cmd = f"aria2c -x 16 -s 16 -k 1M -c '{gguf_url}' -d '{work_dir}' -o 'qwen3.8-27b.gguf' || wget -c --progress=bar:force '{gguf_url}' -O '{gguf_file}'"
+    subprocess.run(download_cmd, shell=True)
+    
+    print(f"\n⚙️ Importation automatique dans Ollama sous l'alias : {ACTIVE_MODEL}...")
+    with open(modelfile, "w") as f:
+        f.write(f"FROM {gguf_file}\nPARAMETER temperature 0.7\nPARAMETER top_p 0.9\n")
+    
+    subprocess.run(f"ollama create {ACTIVE_MODEL} -f {modelfile}", shell=True)
+    
+    print(f"🧹 Nettoyage du fichier temporaire pour récupérer ~17 Go d'espace immédiat...")
+    if os.path.exists(gguf_file):
+        os.remove(gguf_file)
+    if os.path.exists(modelfile):
+        os.remove(modelfile)
+    
+    print(f"✓ Modèle '{ACTIVE_MODEL}' créé avec succès dans Ollama !")
+    print(f"✓ Espace disque disponible : {get_free_disk()}")
 else:
-    print(f"❌ Échec du téléchargement. Vérifiez l'espace disque ({get_free_disk()} libre).")
+    ACTIVE_MODEL = MODEL
+    print(f"Téléchargement via Ollama pull ({ACTIVE_MODEL})...")
+    pull_res = subprocess.run(f"ollama pull {ACTIVE_MODEL}", shell=True)
+    if pull_res.returncode == 0:
+        print(f"✓ Modèle {ACTIVE_MODEL} téléchargé avec succès")
+        print(f"✓ Espace disque restant : {get_free_disk()} libre")
+    else:
+        print(f"❌ Échec du téléchargement. Vérifiez l'espace disque ({get_free_disk()} libre).")
 
 # ── ÉTAPE 7: Test du modèle ──────────────────────────────────────
 print("\n[7/8] Test du modèle...")
 try:
     test_result = subprocess.run(
-        f'echo "Bonjour, qui es-tu ?" | ollama run {MODEL}',
+        f'echo "Bonjour, qui es-tu ?" | ollama run {ACTIVE_MODEL}',
         shell=True,
         capture_output=True,
         text=True,
@@ -184,7 +215,7 @@ summary = f"""
 
   🖥️  Ollama Local:
      URL: http://localhost:11434
-     Modèle actif: {MODEL}
+     Modèle actif: {ACTIVE_MODEL}
      Espace disque restant: {get_free_disk()}
   
   🌐 Tunnel Cloudflare Public:
@@ -197,19 +228,18 @@ summary = f"""
   
   # Supprimer un modèle pour libérer de la place
   !ollama rm <nom_du_modele>
-  # Ex: !ollama rm hf.co/theLittleStone/Qwen3.6-27B-AEON-Ultimate-Uncensored-MTP-i1-GGUF:Q4_K_M
   
   # Exécuter le modèle en invite de commande
-  !ollama run {MODEL}
+  !ollama run {ACTIVE_MODEL}
   
   # API REST locale
-  !curl http://localhost:11434/api/generate -d '{{"model":"{MODEL}", "prompt":"Bonjour", "stream":false}}'
+  !curl http://localhost:11434/api/generate -d '{{"model":"{ACTIVE_MODEL}", "prompt":"Bonjour", "stream":false}}'
   
   # Arrêter Ollama proprement
   !pkill -f "ollama serve"
 
 📚 RESSOURCES:
-  • Modèle: {MODEL}
+  • Modèle: {ACTIVE_MODEL} ({MODEL})
   • Documentation Ollama: https://ollama.com
   • Hugging Face DavidAU: https://huggingface.co/DavidAU
 
@@ -225,7 +255,7 @@ import requests
 
 url = "http://localhost:11434/api/generate"
 data = {{
-    "model": "{MODEL}",
+    "model": "{ACTIVE_MODEL}",
     "prompt": "Explique les principes clés du machine learning en 3 points.",
     "stream": False
 }}
