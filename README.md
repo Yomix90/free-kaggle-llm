@@ -1,6 +1,6 @@
 # 🚀 Installation Ollama + LLM sur Kaggle Notebooks
 
-**Projet complet**: Scripts automatisés pour installer et configurer un LLM (Qwen 7B) avec Ollama sur Kaggle Notebooks, avec tunnel Cloudflare pour accès public.
+**Projet complet**: Scripts automatisés pour installer et exécuter le modèle haute performance **Qwen 3.8 27B TURBO Uncensored** (`hf.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF:Q4_K_M`) avec Ollama sur Kaggle Notebooks, avec **gestion du stockage et suppression d'anciens modèles**, et tunnel Cloudflare gratuit pour accès distant public.
 
 ---
 
@@ -11,14 +11,21 @@
 - **Avantages**:
   - ✅ **1 seule commande** à exécuter dans Kaggle (`!curl -fsSL https://raw.githubusercontent.com/... | bash`)
   - ✅ Détection automatique du matériel GPU (NVIDIA T4/P100) et de la VRAM
-  - ✅ Support natif du modèle **Qwen 3.6 27B Uncensored** (Hugging Face GGUF)
+  - ✅ Support natif du modèle **Qwen 3.8 27B TURBO Uncensored** (Hugging Face GGUF)
+  - ✅ **Suppression automatique d'ancien modèle** pour libérer l'espace disque (évite `no space left on device`)
   - ✅ Démarrage propre du serveur Ollama avec vérification de santé
   - ✅ Tunnel Cloudflare automatique avec extraction et affichage de l'URL publique
   - ✅ Maintien en vie du serveur et arrêt propre lors de l'interruption
 
 **Utilisation directe dans une cellule Kaggle**:
 ```bash
-!curl -fsSL https://raw.githubusercontent.com/VOTRE_USER/VOTRE_REPO/main/setup_kaggle.sh | bash
+!curl -fsSL https://raw.githubusercontent.com/yomix90/free-kaggle-llm/main/setup_kaggle.sh | bash
+```
+
+*(Avec suppression préalable d'un ancien modèle pour libérer ~17 Go)* :
+```bash
+# Exemple : supprimer l'ancien modèle Qwen 3.6 ou tout nettoyer avant d'ajouter Qwen 3.8 27B
+!curl -fsSL https://raw.githubusercontent.com/yomix90/free-kaggle-llm/main/setup_kaggle.sh | bash -s -- "hf.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF:Q4_K_M" "hf.co/theLittleStone/Qwen3.6-27B-AEON-Ultimate-Uncensored-MTP-i1-GGUF:Q4_K_M"
 ```
 
 ---
@@ -101,60 +108,62 @@ exec(open('kaggle_llm_setup.py').read())
 
 ---
 
+## 🧹 Gestion de l'Espace Disque & Suppression de Modèle (Crucial pour 27B)
+
+> ⚠️ **Pourquoi c'est important sur Kaggle :**  
+> Le modèle **Qwen 3.8 27B** pèse environ **17 Go**. Le disque d'un notebook Kaggle offre entre 20 et 50 Go d'espace libre au total. Si vous avez déjà un ancien modèle (comme un précédent 27B ou plusieurs 7B), le téléchargement échouera avec l'erreur :  
+> `write /root/.ollama/models/blobs/...: no space left on device`
+
+### Comment supprimer un modèle pour faire de la place :
+
+1. **En ligne de commande ou cellule Kaggle** :
+```bash
+# Vérifier l'espace disque disponible
+!df -h /
+
+# Lister les modèles installés et leur taille
+!ollama list
+
+# Supprimer le modèle inutile
+!ollama rm hf.co/theLittleStone/Qwen3.6-27B-AEON-Ultimate-Uncensored-MTP-i1-GGUF:Q4_K_M
+# ou tout autre modèle:
+!ollama rm qwen:7b
+```
+
+2. **Automatiquement avec `kaggle_prompt_simple.py`** :
+Modifiez la variable au début du script :
+```python
+DELETE_MODEL = "hf.co/theLittleStone/Qwen3.6-27B-AEON-Ultimate-Uncensored-MTP-i1-GGUF:Q4_K_M"  # ou "all"
+```
+
+3. **Automatiquement avec `setup_kaggle.sh`** :
+Passez le modèle à supprimer en 2ème argument :
+```bash
+!bash setup_kaggle.sh "hf.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF:Q4_K_M" "all"
+```
+
+---
+
 ## 🚀 Démarrage Rapide (1 commande)
 
 ### Option A: En une seule commande depuis GitHub (Recommandé)
 
 Dans une cellule Kaggle Notebook :
 ```bash
-!curl -fsSL https://raw.githubusercontent.com/VOTRE_USER/VOTRE_REPO/main/setup_kaggle.sh | bash
+!curl -fsSL https://raw.githubusercontent.com/yomix90/free-kaggle-llm/main/setup_kaggle.sh | bash
 ```
-*(Ou pour spécifier un autre modèle)* :
+*(Ou en supprimant un ancien modèle en même temps)* :
 ```bash
-!curl -fsSL https://raw.githubusercontent.com/VOTRE_USER/VOTRE_REPO/main/setup_kaggle.sh | bash -s -- "mistral:7b"
+!curl -fsSL https://raw.githubusercontent.com/yomix90/free-kaggle-llm/main/setup_kaggle.sh | bash -s -- "hf.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF:Q4_K_M" "nom_ancien_modele_ou_all"
 ```
 
-### Option B: Script Python direct dans Kaggle Notebook
-
-```python
-import subprocess
-import time
-
-# 1. Installer
-!apt-get install -y zstd
-!curl -fsSL https://ollama.com/install.sh | sh
-
-# 2. Démarrer
-ollama = subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-time.sleep(5)
-
-# 3. Télécharger le modèle
-!ollama pull qwen:7b
-
-# 4. Utiliser
-!echo "Bonjour" | ollama run qwen:7b
-```
-
-### Option B: Script complet
-
-```bash
-python3 kaggle_llm_setup.py
-```
-
----
-
-## 📋 Ce que l'installation Configure
-
-### Composants Installés
-- ✅ **Ollama** - Runtime pour LLMs
-- ✅ **Qwen 7B** - Modèle LLM haute performance (~5.2 GB)
-- ✅ **Zstandard** - Compression
-- ✅ **Cloudflared** - Tunnel public (optionnel)
-
-### Après Installation
-- 🖥️ **API locale**: http://localhost:11434
-- 🌐 **Tunnel public**: https://xxxx.trycloudflare.com
-- 📦 **Modèle chargé**: Qwen 7B (7 milliards de paramètres)
+### Option B: Copier-coller simple dans une cellule Kaggle
+Ouvrez et collez directement le fichier [`kaggle_prompt_simple.py`](file:///c:/Users/USF/Desktop/FREE%20LLM/kaggle_prompt_simple.py). Il gère automatiquement :
+- L'installation d'Ollama et Zstandard
+- Le démarrage du serveur
+- La vérification du disque et la suppression de l'ancien modèle (`DELETE_MODEL`)
+- Le téléchargement de `DavidAU/Qwen3.8-27B-TURBO`
+- Le test et l'ouverture du tunnel public Cloudflare
 
 ---
 
@@ -162,14 +171,14 @@ python3 kaggle_llm_setup.py
 
 ### Ligne de commande
 ```bash
-# Lancer le modèle
-ollama run qwen:7b "Bonjour, comment ça va?"
+# Lancer le modèle 27B en direct
+ollama run hf.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF:Q4_K_M
 
-# Lister les modèles
+# Lister les modèles et leur espace occupé
 ollama list
 
-# Télécharger un autre modèle
-ollama pull mistral:7b
+# Supprimer un modèle pour libérer du stockage
+ollama rm <nom_du_modele>
 ```
 
 ### Python - Simple
@@ -390,14 +399,14 @@ Pour pouvoir utiliser le lien `raw.githubusercontent.com` sur Kaggle :
 ```bash
 git init
 git add .
-git commit -m "feat: ajout du script automatisé setup_kaggle.sh avec Qwen 3.6 27B"
+git commit -m "feat: setup automatisé Qwen 3.8 27B avec option de suppression de modèle"
 git branch -M main
-git remote add origin https://github.com/VOTRE_PSEUDO/free-kaggle-llm.git
+git remote add origin https://github.com/yomix90/free-kaggle-llm.git
 git push -u origin main
 ```
 3. Votre commande Kaggle devient immédiatement :
 ```bash
-!curl -fsSL https://raw.githubusercontent.com/VOTRE_PSEUDO/free-kaggle-llm/main/setup_kaggle.sh | bash
+!curl -fsSL https://raw.githubusercontent.com/yomix90/free-kaggle-llm/main/setup_kaggle.sh | bash
 ```
 
 ---

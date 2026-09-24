@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """
 Script d'installation et configuration d'Ollama + LLM sur Kaggle Notebooks
-Installe toutes les dépendances, configure Ollama, et crée un tunnel Cloudflare
+Installe toutes les dépendances, configure Ollama, gère l'espace disque / suppression de modèles, et crée un tunnel Cloudflare
+
+⚡ Commande 1-Clic pour Kaggle Notebook :
+!curl -fsSL https://raw.githubusercontent.com/yomix90/free-kaggle-llm/main/setup_kaggle.sh | bash
 """
 
 import subprocess
 import time
 import os
 import sys
+
+DEFAULT_MODEL = os.environ.get(
+    "MODEL",
+    "hf.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF:Q4_K_M"
+)
 
 class KaggleLLMSetup:
     def __init__(self):
@@ -30,6 +38,14 @@ class KaggleLLMSetup:
     def log_error(self, message):
         """Affiche un message d'erreur"""
         print(f"{self.colors['RED']}✗ {message}{self.colors['END']}")
+
+    def get_free_disk(self):
+        """Retourne l'espace disque disponible"""
+        try:
+            res = subprocess.run("df -h / | awk 'NR==2 {print $4}'", shell=True, capture_output=True, text=True)
+            return res.stdout.strip()
+        except Exception:
+            return "N/A"
     
     def run_command(self, command, description, shell=True):
         """Exécute une commande shell avec gestion d'erreur"""
@@ -56,7 +72,7 @@ class KaggleLLMSetup:
         """Étape 1: Mettre à jour le système"""
         self.log_step(1, "Mise à jour du système")
         success, _ = self.run_command(
-            "apt-get update && apt-get upgrade -y",
+            "apt-get update -qq && apt-get upgrade -y -qq",
             "Mise à jour des paquets"
         )
         return success
@@ -65,7 +81,7 @@ class KaggleLLMSetup:
         """Étape 2: Installer Zstandard"""
         self.log_step(2, "Installation de Zstandard")
         success, _ = self.run_command(
-            "apt-get install -y zstd",
+            "apt-get install -y -qq zstd",
             "Installation de zstd"
         )
         return success
@@ -95,6 +111,8 @@ class KaggleLLMSetup:
         print(f"{self.colors['YELLOW']}→ Démarrage d'Ollama en arrière-plan...{self.colors['END']}")
         
         try:
+            subprocess.run("pkill -f 'ollama serve'", shell=True, capture_output=True)
+            time.sleep(1)
             self.ollama_process = subprocess.Popen(
                 ["ollama", "serve"],
                 stdout=subprocess.DEVNULL,
@@ -107,12 +125,41 @@ class KaggleLLMSetup:
         except Exception as e:
             self.log_error(f"Erreur au démarrage d'Ollama: {str(e)}")
             return False
+
+    def step_delete_model(self, model_to_delete):
+        """Supprime un ancien modèle pour libérer l'espace disque"""
+        self.log_step("5b", f"Suppression de modèle pour libérer le disque (Espace actuel: {self.get_free_disk()})")
+        
+        if not model_to_delete:
+            return True
+
+        if model_to_delete.strip().lower() == "all":
+            print(f"{self.colors['YELLOW']}→ Nettoyage de TOUS les anciens modèles...{self.colors['END']}")
+            success, out = self.run_command("ollama list", "Listing des modèles")
+            if success and out.strip():
+                lines = out.strip().split("\n")[1:]
+                for l in lines:
+                    parts = l.split()
+                    if parts:
+                        m_name = parts[0]
+                        self.run_command(f"ollama rm {m_name}", f"Suppression de {m_name}")
+        else:
+            print(f"{self.colors['YELLOW']}→ Tentative de suppression de: {model_to_delete}{self.colors['END']}")
+            # Vérifier si présent
+            _, out = self.run_command("ollama list", "Vérification des modèles installés")
+            if model_to_delete in out:
+                self.run_command(f"ollama rm {model_to_delete}", f"Suppression du modèle {model_to_delete}")
+            else:
+                print(f"{self.colors['YELLOW']}ℹ️ Le modèle {model_to_delete} n'est pas présent (aucun fichier à supprimer).{self.colors['END']}")
+
+        print(f"{self.colors['GREEN']}✓ Espace disque disponible après nettoyage : {self.get_free_disk()}{self.colors['END']}")
+        return True
     
-    def step_6_pull_model(self, model="qwen:7b"):
+    def step_6_pull_model(self, model=DEFAULT_MODEL):
         """Étape 6: Télécharger un modèle LLM"""
         self.log_step(6, f"Téléchargement du modèle: {model}")
-        
-        print(f"{self.colors['YELLOW']}→ Cela peut prendre plusieurs minutes...{self.colors['END']}")
+        print(f"{self.colors['YELLOW']}→ Espace disque disponible : {self.get_free_disk()}{self.colors['END']}")
+        print(f"{self.colors['YELLOW']}→ Téléchargement en cours (peut prendre plusieurs minutes)...{self.colors['END']}")
         
         success, output = self.run_command(
             f"ollama pull {model}",
@@ -122,10 +169,11 @@ class KaggleLLMSetup:
         
         if success:
             print(f"{self.colors['YELLOW']}→ Sortie:\n{output}{self.colors['END']}")
+            print(f"{self.colors['GREEN']}✓ Espace disque restant : {self.get_free_disk()}{self.colors['END']}")
         
         return success
     
-    def step_7_test_model(self, model="qwen:7b"):
+    def step_7_test_model(self, model=DEFAULT_MODEL):
         """Étape 7: Tester le modèle"""
         self.log_step(7, f"Test du modèle {model}")
         
@@ -137,7 +185,7 @@ class KaggleLLMSetup:
                 shell=True,
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=180
             )
             
             if result.returncode == 0:
@@ -172,7 +220,7 @@ class KaggleLLMSetup:
         
         if success:
             self.run_command(
-                "rm cloudflared-linux-amd64.deb",
+                "rm -f cloudflared-linux-amd64.deb",
                 "Nettoyage du fichier d'installation"
             )
         
@@ -201,14 +249,11 @@ class KaggleLLMSetup:
             
             print(f"{self.colors['YELLOW']}Sortie du tunnel Cloudflare:{self.colors['END']}")
             
-            # Lire les premières lignes de sortie
             tunnel_url = None
             for i in range(30):
                 line = self.cloudflared_process.stdout.readline()
                 if line:
                     print(line.rstrip())
-                    
-                    # Chercher l'URL publique
                     if "cloudflared.com" in line or "trycloudflare.com" in line:
                         tunnel_url = line.strip()
             
@@ -224,7 +269,7 @@ class KaggleLLMSetup:
             self.log_error(f"Erreur création tunnel: {str(e)}")
             return False
     
-    def step_10_display_summary(self, model="qwen:7b"):
+    def step_10_display_summary(self, model=DEFAULT_MODEL):
         """Étape 10: Afficher le résumé final"""
         self.log_step(10, "Résumé de l'installation")
         
@@ -238,6 +283,7 @@ class KaggleLLMSetup:
   🖥️  Ollama (Local):
      • URL: http://localhost:11434
      • Modèle: {model}
+     • Disque libre: {self.get_free_disk()}
 
   🌐 Tunnel Cloudflare (Public):
      • Vérifié dans la sortie ci-dessus
@@ -245,36 +291,32 @@ class KaggleLLMSetup:
 
 {self.colors['BLUE']}📝 COMMANDES UTILES:{self.colors['END']}
 
-  # Lister les modèles disponibles
+  # Lister les modèles disponibles et leur taille
   ollama list
+
+  # Supprimer un modèle pour libérer du stockage
+  ollama rm <nom_du_modele>
 
   # Exécuter un modèle
   ollama run {model}
 
   # Appeler l'API
-  curl http://localhost:11434/api/generate -d '{{"model": "{model}", "prompt": "Bonjour"}}'
+  curl http://localhost:11434/api/generate -d '{{"model": "{model}", "prompt": "Bonjour", "stream": false}}'
 
   # Arrêter Ollama
-  kill {self.ollama_process.pid if hasattr(self, 'ollama_process') else 'PID_OLLAMA'}
-
-{self.colors['BLUE']}🔧 MODÈLES ALTERNATIFS:{self.colors['END']}
-
-  - qwen:7b         (7B - Recommandé)
-  - mistral:7b      (7B - Rapide)
-  - llama2:7b       (7B - Populaire)
-  - neural-chat:7b  (7B - Chat optimisé)
+  pkill -f "ollama serve"
 
 {self.colors['BLUE']}📚 DOCUMENTATION:{self.colors['END']}
 
   • Ollama: https://ollama.com
   • Hugging Face: https://huggingface.co
-  • Kaggle: https://kaggle.com
+  • Modèle: {model}
 
 {self.colors['YELLOW']}Nota: Le tunnel Cloudflare restera actif tant que ce script s'exécute.{self.colors['END']}
         """
         print(summary)
     
-    def run_full_setup(self, model="qwen:7b", skip_model_test=False):
+    def run_full_setup(self, model=DEFAULT_MODEL, delete_model=None, skip_model_test=False):
         """Exécute l'installation complète"""
         print(f"{self.colors['BLUE']}{'='*60}")
         print("  SETUP COMPLET OLLAMA + LLM POUR KAGGLE NOTEBOOKS")
@@ -286,8 +328,12 @@ class KaggleLLMSetup:
             (self.step_3_install_ollama, "Installation d'Ollama"),
             (self.step_4_verify_ollama, "Vérification d'Ollama"),
             (self.step_5_start_ollama_service, "Démarrage du service Ollama"),
-            (lambda: self.step_6_pull_model(model), "Téléchargement du modèle"),
         ]
+
+        if delete_model:
+            steps.append((lambda: self.step_delete_model(delete_model), f"Suppression de modèle ({delete_model})"))
+        
+        steps.append((lambda: self.step_6_pull_model(model), "Téléchargement du modèle"))
         
         if not skip_model_test:
             steps.append((lambda: self.step_7_test_model(model), "Test du modèle"))
@@ -324,20 +370,22 @@ def main():
     """)
     
     # Paramètres du script
-    model = "qwen:7b"  # Modèle par défaut
+    model = os.environ.get("MODEL", DEFAULT_MODEL)
+    delete_model = os.environ.get("DELETE_MODEL", None)
     
-    print(f"Modèle LLM à installer: {model}")
+    print(f"Modèle LLM cible: {model}")
+    if delete_model:
+        print(f"Suppression demandée pour: {delete_model}")
     print("Démarrage de l'installation...\n")
     
     setup = KaggleLLMSetup()
-    success = setup.run_full_setup(model=model)
+    success = setup.run_full_setup(model=model, delete_model=delete_model)
     
     if success:
         print(f"\n{setup.colors['GREEN']}✓ Installation terminée avec succès!{setup.colors['END']}")
         print(f"\n{setup.colors['YELLOW']}Le tunnel Cloudflare restera actif.{setup.colors['END']}")
         print(f"{setup.colors['YELLOW']}Utilisez Ctrl+C pour arrêter.\n{setup.colors['END']}")
         
-        # Garder le script actif
         try:
             while True:
                 time.sleep(1)

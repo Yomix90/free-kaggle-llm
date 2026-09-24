@@ -15,34 +15,24 @@
 
 ## 🚀 Configuration Rapide
 
+### Option 0 : ⚡ Ultra-rapide en 1 seule commande (Recommandé)
+
+Collez simplement cette commande dans une cellule Kaggle Notebook :
+
+```bash
+!curl -fsSL https://raw.githubusercontent.com/yomix90/free-kaggle-llm/main/setup_kaggle.sh | bash
+```
+
+*(Ou pour supprimer un ancien modèle pour libérer ~17 Go)* :
+```bash
+!curl -fsSL https://raw.githubusercontent.com/yomix90/free-kaggle-llm/main/setup_kaggle.sh | bash -s -- "hf.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF:Q4_K_M" "all"
+```
+
+---
+
 ### Option 1: Copier-coller simple (3 minutes)
 
-Ouvrez un **Kaggle Notebook** et exécutez cette cellule:
-
-```python
-import subprocess
-import time
-
-# 1. Installer Zstandard
-!apt-get update && apt-get install -y zstd
-
-# 2. Installer Ollama
-!curl -fsSL https://ollama.com/install.sh | sh
-
-# 3. Démarrer Ollama en arrière-plan
-import subprocess
-ollama_process = subprocess.Popen(["ollama", "serve"], 
-                                   stdout=subprocess.DEVNULL, 
-                                   stderr=subprocess.DEVNULL)
-time.sleep(5)
-print(f"Ollama démarré - PID: {ollama_process.pid}")
-
-# 4. Télécharger un modèle
-!ollama pull qwen:7b
-
-# 5. Tester
-!echo "Bonjour" | ollama run qwen:7b
-```
+Ouvrez un **Kaggle Notebook** et exécutez le code du fichier [`kaggle_prompt_simple.py`](file:///c:/Users/USF/Desktop/FREE%20LLM/kaggle_prompt_simple.py).
 
 ---
 
@@ -60,8 +50,8 @@ print(f"Ollama démarré - PID: {ollama_process.pid}")
 **Installation:**
 
 ```bash
-# Télécharger le script
-wget https://your-repo/kaggle_llm_setup.py
+# Télécharger le script depuis GitHub
+wget https://raw.githubusercontent.com/yomix90/free-kaggle-llm/main/kaggle_llm_setup.py
 
 # Exécuter
 python3 kaggle_llm_setup.py
@@ -138,7 +128,8 @@ print(f"Ollama en cours d'exécution (PID: {ollama.pid})")
 
 | Modèle | Taille | Vitesse | Qualité | Cas d'usage |
 |--------|--------|---------|---------|------------|
-| **qwen:7b** | 5.2 GB | ⚡⚡⚡ | ⭐⭐⭐⭐ | **Recommandé** - Équilibre optimal |
+| **Qwen 3.8 27B TURBO Uncensored (DavidAU)** | ~17 GB | ⚡⚡⚡ (MTP) | ⭐⭐⭐⭐⭐ | **Recommandé Ultime** - Code, raisonnement, non-censuré |
+| **qwen:7b** | 5.2 GB | ⚡⚡⚡ | ⭐⭐⭐⭐ | Équilibre optimal pour débuter |
 | mistral:7b | 4.1 GB | ⚡⚡⚡⚡ | ⭐⭐⭐ | Très rapide, léger |
 | llama2:7b | 3.8 GB | ⚡⚡⚡ | ⭐⭐⭐⭐ | Populaire, fiable |
 | neural-chat:7b | 4.7 GB | ⚡⚡ | ⭐⭐⭐⭐⭐ | Chat optimisé |
@@ -146,20 +137,40 @@ print(f"Ollama en cours d'exécution (PID: {ollama.pid})")
 | orca2:13b | 7.7 GB | ⚡⚡ | ⭐⭐⭐⭐⭐ | Très intelligent |
 
 ### Télécharger un modèle
+
 ```bash
+# Modèle DavidAU Qwen 3.8 27B Turbo Uncensored (GGUF Q4_K_M)
+!ollama pull hf.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF:Q4_K_M
+
+# Autres modèles standards
 !ollama pull qwen:7b
 !ollama pull mistral:7b
-!ollama pull llama2:7b
 ```
 
-### Lister les modèles installés
+### Lister les modèles installés et leur taille
 ```bash
 !ollama list
 ```
 
-### Supprimer un modèle
+### 🗑️ Supprimer un modèle pour libérer l'espace disque (Indispensable pour 27B)
+
+> 💡 **Rappel Kaggle :**  
+> L'espace disque d'un notebook Kaggle est limité. Un modèle 27B en Q4_K_M pèse **~17 Go**. Si vous avez déjà téléchargé un autre modèle volumineux, vous rencontrerez l'erreur `no space left on device`.  
+> Supprimez toujours les modèles inutiles avant d'en télécharger un nouveau !
+
 ```bash
+# 1. Vérifier l'espace disque restant
+!df -h /
+
+# 2. Supprimer un modèle précis
+!ollama rm hf.co/theLittleStone/Qwen3.6-27B-AEON-Ultimate-Uncensored-MTP-i1-GGUF:Q4_K_M
 !ollama rm qwen:7b
+
+# 3. Supprimer TOUS les modèles installés pour repartir à zéro :
+!ollama list | awk 'NR>1 {print $1}' | xargs -I {} ollama rm {}
+
+# 4. Vérifier le nouvel espace libre
+!df -h /
 ```
 
 ---
