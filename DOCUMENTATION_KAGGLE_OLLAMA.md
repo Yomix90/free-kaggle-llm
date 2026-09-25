@@ -30,9 +30,17 @@ Collez simplement cette commande dans une cellule Kaggle Notebook :
 
 ---
 
-### Option 1: Copier-coller simple (3 minutes)
+### Option 1: Copier-coller simple (Recommandé avec explorateur Hugging Face)
 
 Ouvrez un **Kaggle Notebook** et exécutez le code du fichier [`kaggle_prompt_simple.py`](file:///c:/Users/USF/Desktop/FREE%20LLM/kaggle_prompt_simple.py).
+
+✨ **Fonctionnalités intégrées :**
+- **Explorateur interactif Hugging Face** : Liste les modèles GGUF les plus populaires.
+- **Filtre strict < 50 Go** : N'affiche que les modèles qui tiennent sur le disque Kaggle (~50 Go max).
+- **Recherche par mot-clé** : Qwen, DeepSeek, Mistral, Llama, Coder, etc.
+- **Collage direct de lien** : Collez directement une URL de fichier `.gguf` (ex: `https://huggingface.co/.../resolve/main/...gguf`) ou une URL de dépôt Hugging Face.
+- **Vérification automatique de taille** avant téléchargement (évite l'erreur `no space left on device`).
+- **Téléchargement multi-thread accéléré** (aria2c 16 connexions).
 
 ---
 

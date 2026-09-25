@@ -142,21 +142,28 @@ fi
 echo -e "\n${BLUE}[5/7] 📥 Téléchargement et chargement du modèle (peut prendre quelques minutes selon la taille)...${NC}"
 echo -e "${YELLOW}Cible : ${MODEL}${NC}"
 
-# Vérifier si le modèle est le modèle DavidAU dont le nom dépasse 80 caractères
-# (Ollama CLI limite les noms de dépôt à 80 caractères max, ce qui cause "400 Bad Request: invalid model name")
-if [[ "$MODEL" == *"DavidAU"* && "$MODEL" == *"Qwen3.8-27B-TURBO-Fable-Cold-Fusion"* ]] || [[ "$MODEL" == *"DavidAU/Qwen3.8-27B-TURBO"* ]]; then
-    MODEL_ALIAS="qwen3.8-27b-turbo"
-    GGUF_URL="https://huggingface.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF/resolve/main/Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q4_K_M.gguf"
+# Vérifier si le modèle est une URL directe GGUF ou le modèle DavidAU par défaut
+if [[ "$MODEL" == *"http"* && "$MODEL" == *".gguf"* ]] || [[ "$MODEL" == *"DavidAU"* && "$MODEL" == *"Qwen3.8-27B-TURBO"* ]]; then
+    if [[ "$MODEL" == *"http"* ]]; then
+        GGUF_URL="${MODEL/\/blob\//\/resolve\/}"
+        GGUF_URL="${GGUF_URL%%\?*}"
+        RAW_NAME=$(basename "$GGUF_URL" .gguf)
+        MODEL_ALIAS=$(echo "$RAW_NAME" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]._-' '-' | cut -c 1-40 | sed 's/-$//')
+    else
+        MODEL_ALIAS="qwen3.8-27b-turbo"
+        GGUF_URL="https://huggingface.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF/resolve/main/Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q4_K_M.gguf"
+    fi
+
     WORK_DIR="/kaggle/working"
     [ ! -d "$WORK_DIR" ] && WORK_DIR="/tmp"
-    GGUF_FILE="${WORK_DIR}/qwen3.8-27b.gguf"
+    GGUF_FILE="${WORK_DIR}/model_temp.gguf"
     MODELFILE_PATH="${WORK_DIR}/Modelfile"
 
-    echo -e "${CYAN}ℹ️ Le nom du dépôt Hugging Face (85 caractères) dépasse la limite Ollama de 80 caractères.${NC}"
-    echo -e "${CYAN}🚀 Téléchargement direct accéléré du GGUF Q4_K_M (~17 Go)...${NC}"
+    echo -e "${CYAN}🚀 Téléchargement direct accéléré multi-connexions (aria2c 16 threads)...${NC}"
+    echo -e "   URL : ${GGUF_URL}"
     
     if command -v aria2c &> /dev/null; then
-        aria2c -x 16 -s 16 -k 1M -c "$GGUF_URL" -d "$WORK_DIR" -o "qwen3.8-27b.gguf"
+        aria2c -x 16 -s 16 -k 1M -c "$GGUF_URL" -d "$WORK_DIR" -o "model_temp.gguf"
     else
         wget -c --progress=bar:force:noscroll "$GGUF_URL" -O "$GGUF_FILE"
     fi
@@ -170,7 +177,7 @@ EOF
 
     ollama create "$MODEL_ALIAS" -f "$MODELFILE_PATH"
 
-    echo -e "${YELLOW}🧹 Nettoyage du fichier téléchargé pour récupérer ~17 Go d'espace immédiat...${NC}"
+    echo -e "${YELLOW}🧹 Nettoyage du fichier temporaire pour libérer l'espace disque...${NC}"
     rm -f "$GGUF_FILE" "$MODELFILE_PATH"
     
     # Remplacer MODEL par l'alias pour tous les tests et commandes suivants

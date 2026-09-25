@@ -52,19 +52,23 @@ exec(open('kaggle_llm_setup.py').read())
 
 ---
 
-### 2. **kaggle_prompt_simple.py**
-- **Description**: Script simple pour copier-coller dans Kaggle
+### 3. **kaggle_prompt_simple.py** 🌟 (Le plus interactif & recommandé pour copier-coller)
+- **Description**: Script tout-en-un avec explorateur Hugging Face intégré
 - **Avantages**:
-  - ✅ Rapide à exécuter
-  - ✅ Facile à comprendre
-  - ✅ Pas de dépendances externes
-  - ✅ Adapté aux débutants
+  - ✅ **Menu interactif** : Parcourez les modèles Hugging Face populaires
+  - ✅ **Filtre strict < 50 Go** : N'affiche que les modèles compatibles avec l'espace disque de Kaggle
+  - ✅ **Recherche par mot-clé** : Trouvez facilement des modèles (qwen, deepseek, coder, mistral, llama...)
+  - ✅ **Option collage direct de lien** : Collez n'importe quel lien Hugging Face (URL `.gguf` directe, URL de repo, ou ID `user/repo:quant`)
+  - ✅ **Vérification automatique de taille** avant tout téléchargement
+  - ✅ **Téléchargement multi-connexions ultra-rapide** (aria2c 16 threads)
+  - ✅ **Nettoyage automatique** des fichiers temporaires pour économiser l'espace disque
 
 **Utilisation**:
 1. Ouvrir un Kaggle Notebook
 2. Créer une nouvelle cellule
-3. Copier-coller le code
-4. Exécuter
+3. Copier-coller le code de `kaggle_prompt_simple.py`
+4. Exécuter (choisissez une option dans le menu ou collez un lien !)
+
 
 ---
 
@@ -108,7 +112,36 @@ exec(open('kaggle_llm_setup.py').read())
 
 ---
 
-## 🧹 Gestion de l'Espace Disque & Suppression de Modèle (Crucial pour 27B)
+## 🤗 Explorateur Hugging Face (< 50 Go) & Collage Direct de Lien
+
+Le script intègre désormais un **sélecteur intelligent** connecté directement à l'API Hugging Face :
+
+### 1. Parcourir les modèles populaires (< 50 Go)
+Le script interroge Hugging Face et filtre automatiquement tous les modèles pour **n'afficher que ceux strictement inférieurs à 50 Go**. Vous voyez pour chaque modèle :
+- Le nom du modèle
+- La taille estimée en Go
+- Le nombre de téléchargements
+- La liste des quantifications disponibles (Q4_K_M, Q5_K_M, Q8_0, etc.) avec la mention ⭐ `[Recommandé]`
+
+### 2. Recherche par mot-clé (< 50 Go)
+Entrez simplement un mot-clé (ex: `qwen`, `deepseek`, `mistral`, `coder`, `uncensored`, `heretic`) et le script affichera les résultats compatibles avec la limite de 50 Go de Kaggle.
+
+### 3. Coller directement un lien
+Vous pouvez coller n'importe quel type de lien ou d'identifiant :
+- **Lien direct vers un fichier `.gguf`** :
+  `https://huggingface.co/DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF/resolve/main/Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q4_K_M.gguf`
+  *(les liens `/blob/` sont automatiquement convertis en `/resolve/`)*
+- **Lien vers un dépôt Hugging Face complet** :
+  `https://huggingface.co/unsloth/Qwen3.8-27B-GGUF`
+  *(le script inspecte le dépôt, liste les fichiers < 50 Go et vous propose de choisir la quantification)*
+- **Identifiant avec quantification** :
+  `unsloth/Qwen3.8-27B-GGUF:Q4_K_M`
+- **Modèle Ollama standard** :
+  `llama3.1:8b` ou `mistral`
+
+> 🛡️ **Protection contre le débordement disque :**  
+> Une requête HTTP `HEAD` vérifie la taille exacte du fichier **avant** tout téléchargement. Si un modèle dépasse 50 Go, une alerte s'affiche pour éviter de saturer l'espace disque de Kaggle.
+
 
 > ⚠️ **Pourquoi c'est important sur Kaggle :**  
 > Le modèle **Qwen 3.8 27B** pèse environ **17 Go**. Le disque d'un notebook Kaggle offre entre 20 et 50 Go d'espace libre au total. Si vous avez déjà un ancien modèle (comme un précédent 27B ou plusieurs 7B), le téléchargement échouera avec l'erreur :  
