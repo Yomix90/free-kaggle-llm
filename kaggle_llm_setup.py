@@ -441,7 +441,7 @@ class KaggleLLMSetup:
 
             print(f"{self.colors['BLUE']}⚙️ Création du modèle Ollama '{alias}'...{self.colors['END']}")
             with open(modelfile, "w") as f:
-                f.write(f"FROM {temp_gguf}\nPARAMETER temperature 0.7\nPARAMETER top_p 0.9\n")
+                f.write(f"FROM {temp_gguf}\nPARAMETER temperature 0.7\nPARAMETER top_p 0.9\nPARAMETER num_predict 4096\nPARAMETER num_ctx 8192\n")
 
             success, _ = self.run_command(f"ollama create {alias} -f {modelfile}", f"Création du modèle {alias}")
 

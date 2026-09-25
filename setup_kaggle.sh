@@ -173,6 +173,8 @@ if [[ "$MODEL" == *"http"* && "$MODEL" == *".gguf"* ]] || [[ "$MODEL" == *"David
 FROM ${GGUF_FILE}
 PARAMETER temperature 0.7
 PARAMETER top_p 0.9
+PARAMETER num_predict 4096
+PARAMETER num_ctx 8192
 EOF
 
     ollama create "$MODEL_ALIAS" -f "$MODELFILE_PATH"

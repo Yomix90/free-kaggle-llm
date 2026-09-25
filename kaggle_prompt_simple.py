@@ -473,7 +473,7 @@ def main():
         if dl_res.returncode == 0 and os.path.exists(temp_gguf):
             print(f"\n⚙️ Création et intégration dans Ollama sous l'alias : {active_model}...")
             with open(modelfile, "w") as f:
-                f.write(f"FROM {temp_gguf}\nPARAMETER temperature 0.7\nPARAMETER top_p 0.9\n")
+                f.write(f"FROM {temp_gguf}\nPARAMETER temperature 0.7\nPARAMETER top_p 0.9\nPARAMETER num_predict 4096\nPARAMETER num_ctx 8192\n")
 
             subprocess.run(f"ollama create {active_model} -f {modelfile}", shell=True)
 
@@ -609,7 +609,11 @@ url = "http://localhost:11434/api/generate"
 data = {{
     "model": "{active_model}",
     "prompt": "Explique les principes clés du machine learning en 3 points.",
-    "stream": False
+    "stream": False,
+    "options": {{
+        "num_predict": 4096,  # Empêche la coupure (output limit)
+        "num_ctx": 8192       # Contexte étendu
+    }}
 }}
 
 response = requests.post(url, json=data)

@@ -403,6 +403,26 @@ time.sleep(30)
 !ollama --version
 ```
 
+### Problème: "Response reached its output limit and may be incomplete"
+**Cause:**
+Par défaut, Ollama ou votre interface client (Open WebUI, LM Studio, etc.) limite la réponse à un nombre restreint de tokens (souvent `128` tokens par défaut dans Ollama ou `512`/`1024` dans les UI). Quand la réponse générée dépasse cette limite, le modèle s'arrête avec le statut `length` et affiche cet avertissement.
+
+**Solutions :**
+1. **Via l'API (Python) :** Préciser `"num_predict"` et `"num_ctx"` dans les options :
+```python
+data = {
+    "model": "qwen3.8-27b-turbo",
+    "prompt": "Votre question...",
+    "stream": False,
+    "options": {
+        "num_predict": 4096,   # Permet jusqu'à 4096 tokens générés (-1 = illimité)
+        "num_ctx": 8192        # Augmente la fenêtre de contexte
+    }
+}
+```
+2. **Via Modelfile permanent :** Les scripts du dépôt configurent automatiquement `PARAMETER num_predict 4096` et `PARAMETER num_ctx 8192` lors de la création du modèle.
+3. **Dans une interface Web (Open WebUI, Jan, LM Studio...) :** Allez dans les paramètres du modèle / *Advanced Parameters* et augmentez le réglage **Max Output Tokens** (ex: 4096).
+
 ### Problème: "Port 11434 déjà utilisé"
 **Solution:**
 ```bash
