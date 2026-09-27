@@ -353,6 +353,8 @@ else
 fi
 
 TARGET_MODEL="${TARGET_MODEL:-default}"
+# Nettoyer si l'utilisateur a collé "ollama run ..." ou "ollama pull ..."
+TARGET_MODEL=$(echo "$TARGET_MODEL" | sed -E 's/^ollama[[:space:]]+(run|pull)[[:space:]]+//i')
 
 banner
 echo -e "${BOLD}Modèle cible :${NC} ${YELLOW}${TARGET_MODEL}${NC}"
@@ -475,14 +477,20 @@ elif [[ "$TARGET_MODEL" =~ \.[gG][gG][uU][fF](\?.*)?$ ]] || [[ "$TARGET_MODEL" =
     FINAL_ALIAS=$(echo "$RAW_NAME" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]._-' '-' | cut -c 1-40 | sed 's/-$//')
     echo -e "${GREEN}✓ Fichier direct GGUF détecté : ${FINAL_ALIAS}${NC}"
     echo -e "   URL : ${GGUF_DOWNLOAD_URL}"
-elif [[ "$TARGET_MODEL" == *"huggingface.co/"* || "$TARGET_MODEL" == *"hf.co/"* ]] || [[ "$TARGET_MODEL" =~ ^[a-zA-Z0-9_\.\-]+/[a-zA-Z0-9_\.\-]+$ ]]; then
-    # URL ou ID de repo Hugging Face -> résolution automatique via Python de la meilleure version Q4_K_M
+elif [[ "$TARGET_MODEL" == *"huggingface.co/"* || "$TARGET_MODEL" == *"hf.co/"* ]] || [[ "$TARGET_MODEL" =~ ^[a-zA-Z0-9_\.\-]+/[a-zA-Z0-9_\.\-]+(:[a-zA-Z0-9_\.\-]+)?$ ]]; then
+    # URL ou ID de repo Hugging Face -> résolution automatique via Python (avec support de tag ex: :Q4_K_M)
     echo -e "${BLUE}🔍 Analyse automatique du dépôt Hugging Face pour trouver le meilleur fichier GGUF (< 50 Go)...${NC}"
     RESOLVED=$(python3 -c "
 import urllib.request, json, re, sys
 
 target = '''${TARGET_MODEL}'''.strip()
+target = re.sub(r'^(?:ollama\s+(?:run|pull)\s+)', '', target, flags=re.I).strip()
 clean = re.sub(r'^(?:https?://)?(?:www\.)?(?:huggingface\.co/|hf\.co/)', '', target, flags=re.I).strip('/')
+
+quant_tag = None
+if ':' in clean:
+    clean, quant_tag = clean.split(':', 1)
+
 parts = [p for p in clean.split('/') if p]
 if len(parts) >= 2:
     repo_id = f'{parts[0]}/{parts[1]}'
@@ -518,15 +526,23 @@ try:
     non_split = [g for g in ggufs if not g['is_split']]
     candidates = non_split if non_split else ggufs
 
-    # Trouver Q4_K_M en priorité, puis les autres formats courants
     picked = None
-    for pat in ['Q4_K_M', 'q4_k_m', 'Q5_K_M', 'q5_k_m', 'Q4_0', 'q4_0', 'Q4_K_S', 'q4_k_s', 'Q5_0', 'Q8_0']:
+    # Si une quantification spécifique est demandée (ex: :Q4_K_M)
+    if quant_tag:
         for g in candidates:
-            if pat in g['path']:
+            if quant_tag.lower() in g['path'].lower():
                 picked = g
                 break
-        if picked:
-            break
+
+    # Sinon, trouver Q4_K_M en priorité, puis les autres formats courants
+    if not picked:
+        for pat in ['Q4_K_M', 'q4_k_m', 'Q5_K_M', 'q5_k_m', 'Q4_0', 'q4_0', 'Q4_K_S', 'q4_k_s', 'Q5_0', 'Q8_0']:
+            for g in candidates:
+                if pat in g['path']:
+                    picked = g
+                    break
+            if picked:
+                break
     if not picked:
         picked = sorted(candidates, key=lambda x: x['size'])[len(candidates)//2]
 
